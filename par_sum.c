@@ -17,6 +17,8 @@
 #include <unistd.h>
 #include <pthread.h>
 
+
+// Struct for singly linked list of numbers. 
 typedef struct Node Node;
 struct Node
 {
@@ -33,28 +35,34 @@ bool done = false;
 
 bool leave = false;
 int nthreads = 0;
+Node current;
 
 // function prototypes
-pthread_t *create_worker();
+void create_worker(pthread_t *thread);
 void update(long number);
 
 /*
  * spawn a new worker thread
  */
-pthread_t *create_worker(long number)
+void create_worker(pthread_t *thread)
 {
-    pthread_t thread;
-    pthread_create(&thread, NULL, update, number);
-    return &thread;
+    pthread_create(thread, NULL, update, NULL);
 }
 /*
  * update global aggregate variables given a number
  */
 void update(long number)
 {
-    while (1)
+    while (!done)
     {
-        // lock mutex
+        /*
+         * All threads wait here except for one which locks the mutex and
+         * waits in the inner while loop for the queue to be non-empty.
+         * After the active thread is alerted of the new task in the queue,
+         * it exits the inner while loop, unlocks the mutex and sleeps for
+         * x seconds and updates the aggregate variables. After this it
+         * waits in line with the rest of the threads.
+        */
         while (!leave)
         {
             // cond_wait(&cond, &mut)
@@ -112,6 +120,14 @@ int main(int argc, char *argv[])
     char action;
     long num;
     Node *last;
+
+    // Create <nthreads> worker threads
+    pthread_t threads[nthreads];
+    for (int i = 0; i < nthreads; i++){
+        pthread_t t;
+        create_worker(&t);
+        threads[i] = t;
+    }
     while (fscanf(fin, "%c %ld\n", &action, &num) == 2)
     {
 
@@ -128,11 +144,11 @@ int main(int argc, char *argv[])
             n.num = num;
             if (!last) {
                 last = &n;
+                current = *last;
             } else {
                 last->next = &n;
                 last = &n;
             }
-            update(num);
         }
         else if (action == 'w')
         { // wait
@@ -145,6 +161,9 @@ int main(int argc, char *argv[])
         }
     }
     fclose(fin);
+    done = true;
+    // wake any idle workers
+    // wait for all workers to finish
 
     // print results
     printf("%ld %ld %ld %ld\n", sum, odd, min, max);
