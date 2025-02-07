@@ -18,56 +18,12 @@
 #include <pthread.h>
 
 // Struct for singly linked list of numbers.
-typedef struct Node
+typedef struct Node Node;
+struct Node
 {
     long num;
-    struct Node *next;
-} Node;
-
-/*
- * returns and dequeues the head of the linked list
- */
-Node *dequeue(Node **queue)
-{
-    Node *ret = *queue;
-    *queue = (*queue)->next;
-    return ret;
-}
-
-/*
- * adds a new node to the end of the linked list
- */
-void enqueue(Node **queue, int num)
-{
-    Node *new_node = (Node *)malloc(sizeof(Node));
-    new_node->num = num;
-    new_node->next = NULL;
-
-    if (*queue == NULL)
-    {
-        *queue = new_node;
-        return;
-    }
-
-    Node *cursor = *queue;
-    while (cursor->next != NULL)
-    {
-        cursor = cursor->next;
-    }
-
-    cursor->next = new_node;
-}
-
-void free_queue(Node **queue)
-{
-    Node *cursor = *queue;
-    do
-    {
-        Node *up_next = cursor;
-        cursor = cursor->next;
-        free(up_next);
-    } while (cursor != NULL);
-}
+    Node *next;
+};
 // aggregate variables
 long sum = 0;
 long odd = 0;
@@ -77,14 +33,14 @@ bool done = false;
 
 bool leave = false;
 int nthreads = 0;
-Node *queue;
+Node current;
 
 pthread_mutex_t get_task = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t new_task = PTHREAD_COND_INITIALIZER;
 
 // function prototypes
 void create_worker(pthread_t *thread);
-void *update(void *arg);
+void update(long number);
 
 /*
  * spawn a new worker thread
@@ -96,49 +52,45 @@ void create_worker(pthread_t *thread)
 /*
  * update global aggregate variables given a number
  */
-void *update(void *arg)
+void update(long number)
 {
-    while (!done || queue)
+    while (!done)
     {
-        int wait_time = 0;
-
-        // All threads but one wait here
+        /*
+         * All threads wait here except for one which locks the mutex and
+         * waits in the inner while loop for the queue to be non-empty.
+         * After the active thread is alerted of the new task in the queue,
+         * it exits the inner while loop, unlocks the mutex and sleeps for
+         * x seconds and updates the aggregate variables. After this it
+         * waits in line with the rest of the threads.
+         */
         pthread_mutex_lock(&get_task);
-
-        // If the queue isn't empty, complete the first task in the queue
-        if (queue)
+        while (!leave)
         {
-            wait_time = queue->num;
-            dequeue(&queue);
-        }
-        else
-        {
+            // cond_wait(&cond, &mut)
             pthread_cond_wait(&new_task, &get_task);
-            wait_time = queue->num;
-            dequeue(&queue);
         }
         // unlock mutex
-        pthread_mutex_unlock(&get_task);
+
         // work here
-        sleep(wait_time);
+        sleep(number);
 
         // update aggregate variables
-        sum += wait_time;
-        if (wait_time % 2 == 1)
+        sum += number;
+        if (number % 2 == 1)
         {
             odd++;
         }
-        if (wait_time < min)
+        if (number < min)
         {
-            min = wait_time;
+            min = number;
         }
-        if (wait_time > max)
+        if (number > max)
         {
-            max = wait_time;
+            max = number;
         }
         // Thread jumps back in line
     }
-    return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -167,8 +119,10 @@ int main(int argc, char *argv[])
     }
     // DONE READING/CHECKING ARGUMENTS
 
+    // load numbers and add them to the queue
     char action;
     long num;
+    Node *last;
 
     // Create <nthreads> worker threads
     pthread_t threads[nthreads];
@@ -178,7 +132,6 @@ int main(int argc, char *argv[])
         create_worker(&t);
         threads[i] = t;
     }
-    clock_t start = clock();
     while (fscanf(fin, "%c %ld\n", &action, &num) == 2)
     {
 
@@ -191,8 +144,18 @@ int main(int argc, char *argv[])
 
         if (action == 'p')
         { // process
-            enqueue(&queue, num);
-            pthread_cond_signal(&new_task);
+            struct Node n;
+            n.num = num;
+            if (!last)
+            {
+                last = &n;
+                current = *last;
+            }
+            else
+            {
+                last->next = &n;
+                last = &n;
+            }
         }
         else if (action == 'w')
         { // wait
@@ -207,16 +170,10 @@ int main(int argc, char *argv[])
     fclose(fin);
     done = true;
     // wake any idle workers
-    pthread_cond_broadcast(&new_task);
     // wait for all workers to finish
-    for (int i = 0; i < nthreads; i++)
-    {
-        pthread_join(threads[i], NULL);
-    }
-    clock_t clock_time = clock() - start;
+
     // print results
     printf("%ld %ld %ld %ld\n", sum, odd, min, max);
-    printf("%f\n", (double)clock_time / CLOCKS_PER_SEC);
 
     // clean up and return
     return (EXIT_SUCCESS);
