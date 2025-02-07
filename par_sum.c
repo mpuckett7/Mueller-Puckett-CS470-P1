@@ -73,13 +73,14 @@ long sum = 0;
 long odd = 0;
 long min = INT_MAX;
 long max = INT_MIN;
-bool done = false;
+volatile bool done = false;
 
 bool leave = false;
 int nthreads = 0;
 Node *queue;
 
-pthread_mutex_t get_task = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t use_queue = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t update_info = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t new_task = PTHREAD_COND_INITIALIZER;
 
 // function prototypes
@@ -103,7 +104,7 @@ void *update(void *arg)
         int wait_time = 0;
 
         // All threads but one wait here
-        pthread_mutex_lock(&get_task);
+        pthread_mutex_lock(&use_queue);
 
         // If the queue isn't empty, complete the first task in the queue
         if (queue)
@@ -113,17 +114,19 @@ void *update(void *arg)
         }
         else
         {
-            pthread_cond_wait(&new_task, &get_task);
+            pthread_cond_wait(&new_task, &use_queue);
             wait_time = queue->num;
             free(dequeue(&queue));
         }
         // unlock mutex
-        pthread_mutex_unlock(&get_task);
-        if (done) return NULL;
+        pthread_mutex_unlock(&use_queue);
         // work here
         sleep(wait_time);
 
         // update aggregate variables
+
+        // Only one thread updates these at a time.
+        pthread_mutex_lock(&update_info);
         sum += wait_time;
         if (wait_time % 2 == 1)
         {
@@ -137,6 +140,7 @@ void *update(void *arg)
         {
             max = wait_time;
         }
+        pthread_mutex_unlock(&update_info);
         // Thread jumps back in line
     }
     return NULL;
@@ -188,6 +192,8 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
+
+        pthread_mutex_lock(&use_queue);
         if (action == 'p')
         { // process
             enqueue(&queue, num);
@@ -202,6 +208,7 @@ int main(int argc, char *argv[])
             printf("ERROR: Unrecognized action: '%c'\n", action);
             exit(EXIT_FAILURE);
         }
+        pthread_mutex_unlock(&use_queue);
     }
     fclose(fin);
     done = true;
