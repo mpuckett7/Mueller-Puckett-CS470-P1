@@ -43,7 +43,7 @@ void enqueue(Node **queue, int num)
     new_node->num = num;
     new_node->next = NULL;
 
-    if (*queue == NULL)
+    if (queue && *queue == NULL)
     {
         *queue = new_node;
         return;
@@ -119,6 +119,7 @@ void *update(void *arg)
         }
         // unlock mutex
         pthread_mutex_unlock(&get_task);
+        if (done) return NULL;
         // work here
         sleep(wait_time);
 
@@ -174,9 +175,7 @@ int main(int argc, char *argv[])
     pthread_t threads[nthreads];
     for (int i = 0; i < nthreads; i++)
     {
-        pthread_t t;
-        create_worker(&t);
-        threads[i] = t;
+        create_worker(&threads[i]);
     }
     clock_t start = clock();
     while (fscanf(fin, "%c %ld\n", &action, &num) == 2)
@@ -213,7 +212,6 @@ int main(int argc, char *argv[])
     {
         pthread_join(threads[i], NULL);
     }
-    free_queue(&queue);
     clock_t clock_time = clock() - start;
     // print results
     printf("%ld %ld %ld %ld\n", sum, odd, min, max);
