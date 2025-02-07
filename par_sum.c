@@ -109,13 +109,13 @@ void *update(void *arg)
         if (queue)
         {
             wait_time = queue->num;
-            dequeue(&queue);
+            free(dequeue(&queue));
         }
         else
         {
             pthread_cond_wait(&new_task, &get_task);
             wait_time = queue->num;
-            dequeue(&queue);
+            free(dequeue(&queue));
         }
         // unlock mutex
         pthread_mutex_unlock(&get_task);
@@ -213,6 +213,7 @@ int main(int argc, char *argv[])
     {
         pthread_join(threads[i], NULL);
     }
+    free_queue(&queue);
     clock_t clock_time = clock() - start;
     // print results
     printf("%ld %ld %ld %ld\n", sum, odd, min, max);
