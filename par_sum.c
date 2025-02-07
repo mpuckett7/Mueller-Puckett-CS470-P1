@@ -6,8 +6,7 @@
  *
  * Compile with --std=c99
  *
- * Beau Mueller
- * Mason Pucket
+ * Group 13
  */
 
 #include <limits.h>
