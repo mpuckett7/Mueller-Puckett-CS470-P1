@@ -91,14 +91,19 @@ void *update(void *arg);
  */
 void create_worker(pthread_t *thread)
 {
-    pthread_create(thread, NULL, update, NULL);
+    int i = pthread_create(thread, NULL, update, NULL);
+    if (i != 0){
+        fprintf(stderr, "Could not create thread\n");
+        exit(EXIT_FAILURE);
+    }
 }
 /*
  * update global aggregate variables given a number
  */
 void *update(void *arg)
 {
-    while (!done || queue)
+    //possible protection some how
+    while (queue)
     {
         int wait_time = 0;
 
@@ -210,13 +215,17 @@ int main(int argc, char *argv[])
         pthread_mutex_unlock(&use_queue);
     }
     fclose(fin);
-    done = true;
+    //done = true;
     // wake any idle workers
     pthread_cond_broadcast(&new_task);
     // wait for all workers to finish
     for (int i = 0; i < nthreads; i++)
     {
-        pthread_join(threads[i], NULL);
+        int j = pthread_join(threads[i], NULL);
+        if (j != 0) {
+            fprintf(stderr, "Could not join a thread\n");
+            exit(EXIT_FAILURE);
+        }
     }
     clock_t clock_time = clock() - start;
     // print results
