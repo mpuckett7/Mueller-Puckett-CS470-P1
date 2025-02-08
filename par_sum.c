@@ -13,12 +13,30 @@
  * Aanlysis Questions:
  *  1. No, we did not use AI for this project.
  * 
- *  2. We ran bash script exxperiments in the terminal, with different test cases that included an increasing number of threads per run.
- *     This number expanded from 1, 2, 4, 8, 16, 32, 64, 128 per test case.  
+ *  2. We ran bash script experiments in the terminal, with different test cases that included an increasing number of threads per run. 
+ *     This number expanded from 1, 2, 4, 8, 16, 32, 64, 128 per test case. We used gettimeofday() from sys/time.h to measure time performance/wall 
+ *     clock performance since we are using pthreads.
+ *
+ *  3.  The worker threads remain in a while loop checking both a queue and a done boolean variable. 
+ *      The done variable is not updated until the main thread is done processing the text file. 
+ *      The worker threads either take something from the queue and do the task or busy wait on the main thread to signal 
+ *      that a new task has been added to the queue via a condition variable.
+ *
+ *  4. Once the supervisor is completed it will then broadcast instead of signal based on a condition variable that threads wait on if the queue is empty. 
+ *     This ensures that if any thread is busy waiting on the condition variable after all the tasks have been processed and dealt out 
+ *     that they are reawakened. To prevent any straggler from causing havoc we have the threads check to see if the queue is empty before 
+ *     grabbing a task when reawakened from the condition variable. Then we join them all back together in a for loop at the end.
+ *
+ *  5. We would change the way our enqueue method works by having a priority number associated with each task; when processing a new task we would start 
+ *     at the head of the linked list and move it down the linked list while its priority is lesser than the current nodes. 
+ *     This would not affect synchronization since the queue would still be accessed by the threads in the same manner.
+ *
+ *  6. To implement task differentiation you would simply create specialized versions of this process; an array of x-worker threads then y-worker threads 
+ *     and z-worker threads each with their own queue to pull from and update method to use. The supervisor thread would then sort incoming tasks 
+ *     appropriately. Synchronization would be the same just with three different collections of worker threads to sync at the end rather than one.
+ *
  * 
  */
-
-
 
 
 #include <limits.h>
@@ -116,23 +134,22 @@ void create_worker(pthread_t *thread)
 void *update(void *arg)
 {
     //possible protection some how
-    while (!done || queue)
+    while (1)
     {
         int wait_time = 0;
 
         // All threads but one wait here
+        pthread_mutex_lock(&use_queue);
 
         // If the queue isn't empty, complete the first task in the queue
         if (queue)
         {
-            pthread_mutex_lock(&use_queue);
             wait_time = queue->num;
             free(dequeue(&queue));
             pthread_mutex_unlock(&use_queue);
         }
         else
         {
-            pthread_mutex_lock(&use_queue);
             pthread_cond_wait(&new_task, &use_queue);
             if(queue){
                 wait_time = queue->num;
@@ -143,7 +160,7 @@ void *update(void *arg)
         // unlock mutex
 
         // work here
-        sleep(wait_time);
+        //sleep(wait_time);
 
         // update aggregate variables
 
@@ -154,7 +171,7 @@ void *update(void *arg)
         {
             odd++;
         }
-        if (wait_time < min)
+        if (wait_time < min && wait_time != 0)
         {
             min = wait_time;
         }
@@ -165,6 +182,13 @@ void *update(void *arg)
         pthread_mutex_unlock(&update_info);
         // Thread jumps back in line
 
+        pthread_mutex_lock(&use_queue);
+        if(done && !queue)
+        {
+            pthread_mutex_unlock(&use_queue);
+            return NULL;
+        }
+        pthread_mutex_unlock(&use_queue);
     }
     return NULL;
 }
@@ -204,7 +228,7 @@ int main(int argc, char *argv[])
     {
         create_worker(&threads[i]);
     }
-    clock_t start = clock();
+
     while (fscanf(fin, "%c %ld\n", &action, &num) == 2)
     {
 
@@ -225,7 +249,7 @@ int main(int argc, char *argv[])
         }
         else if (action == 'w')
         { // wait
-            sleep(num);
+            //sleep(num);
         }
         else
         {
@@ -234,7 +258,10 @@ int main(int argc, char *argv[])
         }
     }
     fclose(fin);
+
+    pthread_mutex_lock(&use_queue);
     done = true;
+    pthread_mutex_unlock(&use_queue);
     // wake any idle workers
     pthread_cond_broadcast(&new_task);
     // wait for all workers to finish
@@ -246,10 +273,9 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
     }
-    clock_t clock_time = clock() - start;
+
     // print results
     printf("%ld %ld %ld %ld\n", sum, odd, min, max);
-    printf("%f\n", (double)clock_time / CLOCKS_PER_SEC);
 
     // clean up and return
     return (EXIT_SUCCESS);
