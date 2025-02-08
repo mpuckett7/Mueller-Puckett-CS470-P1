@@ -78,6 +78,7 @@ bool leave = false;
 int nthreads = 0;
 Node *queue;
 
+pthread_mutex_t update_queue = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t use_queue = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t update_info = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t new_task = PTHREAD_COND_INITIALIZER;
@@ -124,6 +125,7 @@ void *update(void *arg)
         }
         // unlock mutex
         pthread_mutex_unlock(&use_queue);
+        if (done) return NULL;
         // work here
         sleep(wait_time);
 
