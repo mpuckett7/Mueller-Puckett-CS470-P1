@@ -104,32 +104,28 @@ void create_worker(pthread_t *thread)
 void *update(void *arg)
 {
     //possible protection some how
-    while (!done || queue)
+    while (queue)
     {
         int wait_time = 0;
 
         // All threads but one wait here
+        pthread_mutex_lock(&use_queue);
 
         // If the queue isn't empty, complete the first task in the queue
         if (queue)
         {
-            pthread_mutex_lock(&use_queue);
             wait_time = queue->num;
             free(dequeue(&queue));
-            pthread_mutex_unlock(&use_queue);
         }
         else
         {
-            pthread_mutex_lock(&use_queue);
             pthread_cond_wait(&new_task, &use_queue);
-            if(queue){
-                wait_time = queue->num;
-                free(dequeue(&queue));
-            }
-            pthread_mutex_unlock(&use_queue);
+            //wait_time = queue->num;
+            //free(dequeue(&queue));
         }
         // unlock mutex
-
+        pthread_mutex_unlock(&use_queue);
+        //if (done) return NULL;
         // work here
         sleep(wait_time);
 
@@ -152,7 +148,6 @@ void *update(void *arg)
         }
         pthread_mutex_unlock(&update_info);
         // Thread jumps back in line
-
     }
     return NULL;
 }
@@ -204,12 +199,11 @@ int main(int argc, char *argv[])
         }
 
 
+        pthread_mutex_lock(&use_queue);
         if (action == 'p')
         { // process
-            pthread_mutex_lock(&use_queue);
             enqueue(&queue, num);
-            pthread_mutex_unlock(&use_queue);
-            pthread_cond_signal(&new_task);      
+            pthread_cond_signal(&new_task);
         }
         else if (action == 'w')
         { // wait
@@ -220,9 +214,10 @@ int main(int argc, char *argv[])
             printf("ERROR: Unrecognized action: '%c'\n", action);
             exit(EXIT_FAILURE);
         }
+        pthread_mutex_unlock(&use_queue);
     }
     fclose(fin);
-    done = true;
+    //done = true;
     // wake any idle workers
     pthread_cond_broadcast(&new_task);
     // wait for all workers to finish
