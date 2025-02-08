@@ -9,6 +9,18 @@
  * Group 13
  */
 
+/*
+ * Aanlysis Questions:
+ *  1. No, we did not use AI for this project.
+ * 
+ *  2. We ran bash script exxperiments in the terminal, with different test cases that included an increasing number of threads per run.
+ *     This number expanded from 1, 2, 4, 8, 16, 32, 64, 128 per test case.  
+ * 
+ */
+
+
+
+
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
